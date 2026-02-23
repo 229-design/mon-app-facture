@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Schwebius Invoice App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        
+        :root { --primary: #2563eb; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; -webkit-tap-highlight-color: transparent; }
+        
+        /* Masquer la navigation à l'impression */
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; padding: 0; }
+            .invoice-container { 
+                box-shadow: none !important; border: none !important; 
+                margin: 0 !important; padding: 0 !important;
+                width: 100% !important; max-width: 100% !important;
+            }
+            .app-content { padding: 0 !important; margin: 0 !important; }
+        }
+
+        /* Styles spécifiques à l'application mobile */
+        .invoice-container { 
+            background: white; width: 210mm; min-height: 297mm;
+            margin: 0 auto; padding: 1.5cm; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-radius: 4px; 
+            transform-origin: top center;
+        }
+
+        /* Ajustement du zoom de la facture sur mobile pour la preview */
+        @media (max-width: 1024px) {
+            .invoice-preview-wrapper { overflow-x: auto; padding: 10px; background: #cbd5e1; }
+            .invoice-container { zoom: 0.45; width: 210mm; }
+        }
+        @media (max-width: 640px) {
+            .invoice-container { zoom: 0.35; }
+        }
+
+        input, textarea, select { border: 1px solid #e2e8f0; padding: 0.75rem; border-radius: 12px; width: 100%; font-size: 0.95rem; transition: all 0.2s; background: #fff; appearance: none; }
+        input:focus { outline: none; border-color: var(--primary); ring: 3px; ring-color: rgba(37, 99, 235, 0.1); }
+        label { display: block; font-size: 0.7rem; font-weight: 800; color: #64748b; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* Animation des onglets */
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .nav-item.active { color: var(--primary); }
+        .nav-item.active i { transform: translateY(-4px); transition: 0.2s; }
+    </style>
+</head>
+<body class="pb-24 lg:pb-0">
+
+    <!-- HEADER APP MOBILE -->
+    <header class="no-print lg:hidden bg-white border-b sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <div class="bg-slate-900 text-white p-2 rounded-lg"><i class="fas fa-bolt"></i></div>
+            <h1 class="font-black text-lg tracking-tighter">Schwebius <span class="text-blue-600">Pro</span></h1>
+        </div>
+        <button onclick="window.print()" class="text-blue-600 font-bold text-sm"><i class="fas fa-file-pdf mr-1"></i> PDF</button>
+    </header>
+
+    <div class="max-w-[1800px] mx-auto flex flex-col lg:flex-row h-screen overflow-hidden">
+        
+        <!-- SIDEBAR / CONFIGURATION (DISSOCIÉE SUR MOBILE) -->
+        <div id="config-panel" class="tab-content active no-print w-full lg:w-[500px] bg-white lg:border-r border-slate-200 overflow-y-auto p-6 lg:p-10 space-y-8">
+            
+            <div class="hidden lg:flex items-center justify-between mb-8">
+                <div class="flex items-center gap-3">
+                    <div class="bg-slate-900 p-2.5 rounded-xl text-white shadow-lg"><i class="fas fa-pen-nib"></i></div>
+                    <h2 class="text-xl font-black text-slate-900">Invoice <span class="text-blue-600">System</span></h2>
+                </div>
+                <button onclick="resetData()" class="text-slate-300 hover:text-red-500 transition"><i class="fas fa-sync-alt"></i></button>
+            </div>
+
+            <!-- SECTION 1: PROFIL -->
+            <div class="space-y-6">
+                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2 flex justify-between">
+                    <span>Mon Profil</span>
+                    <button onclick="resetData()" class="lg:hidden text-red-400">Reset</button>
+                </h3>
+                <div class="space-y-4">
+                    <div><label>Nom & Mention EI</label><input type="text" id="in-my-name" value="Valentin Schwebius EI" oninput="updateAndSave()"></div>
+                    <div><label>Adresse Professionnelle</label><textarea id="in-my-addr" rows="2" oninput="updateAndSave()">5 RUE de l'Épinoche&#10;67000 Strasbourg, France</textarea></div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label>SIRET</label><input type="text" id="in-my-siret" value="999 202 450 00014" oninput="updateAndSave()"></div>
+                        <div><label>Code APE</label><input type="text" id="in-my-ape" value="7410Z" oninput="updateAndSave()"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: CLIENT -->
+            <div class="space-y-6">
+                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Client</h3>
+                <div class="space-y-4">
+                    <div><label>Raison Sociale</label><input type="text" id="in-cli-name" value="JZ SANTE NATURELLE" oninput="updateAndSave()"></div>
+                    <div><label>Adresse Client</label><textarea id="in-cli-addr" rows="2" oninput="updateAndSave()">Parc d’Innovation&#10;100 Rue Léon Foucault&#10;67400 Illkirch-Graffenstaden</textarea></div>
+                    <div><label>TVA Client</label><input type="text" id="in-cli-tva" value="FR49500676150" oninput="updateAndSave()"></div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: PRESTATIONS -->
+            <div class="space-y-6">
+                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Prestations</h3>
+                <div id="items-inputs-container" class="space-y-4"></div>
+                <button onclick="addItemRow()" class="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-bold text-sm hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-plus"></i> Ajouter un service
+                </button>
+            </div>
+
+            <!-- SECTION 4: DROITS & BANQUE -->
+            <div class="p-6 bg-slate-900 rounded-3xl space-y-6 text-white">
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-slate-500">N° Facture</label><input type="text" id="in-inv-num" value="F-2026-001" oninput="updateAndSave()" class="bg-slate-800 border-slate-700 text-white"></div>
+                    <div><label class="text-slate-500">Acompte (%)</label><input type="number" id="in-dep-pct" value="25" oninput="updateAndSave()" class="bg-slate-800 border-slate-700 text-white"></div>
+                </div>
+                <div><label class="text-slate-500">Date d'émission</label><input type="text" id="in-inv-date" value="23 février 2026" oninput="updateAndSave()" class="bg-slate-800 border-slate-700 text-white"></div>
+                
+                <div class="pt-4 border-t border-slate-800 space-y-4">
+                    <div><label class="text-slate-500">IBAN</label><input type="text" id="in-iban" value="FR76 1027 8010 1900 0206 7910 223" oninput="updateAndSave()" class="bg-slate-800 border-slate-700 text-white font-mono text-[11px]"></div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><label class="text-slate-500">BIC</label><input type="text" id="in-bic" value="CMCIFR2A" oninput="updateAndSave()" class="bg-slate-800 border-slate-700 text-white"></div>
+                        <div><label class="text-slate-500">Banque</label><input type="text" id="in-bank" value="CCM DE SOUFFELWEYERSHEIM" oninput="updateAndSave()" class="bg-slate-800 border-slate-700 text-white"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 5: OPTIONS DESIGNER -->
+            <div class="space-y-4">
+                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Propriété Intellectuelle</h3>
+                <div class="space-y-4">
+                    <div><label>Droits cédés</label><input type="text" id="in-rights-type" value="Tous supports de communication" oninput="updateAndSave()"></div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div><label>Durée</label><input type="text" id="in-rights-time" value="Illimitée" oninput="updateAndSave()"></div>
+                        <div><label>Territoire</label><input type="text" id="in-rights-geo" value="Monde entier" oninput="updateAndSave()"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hidden lg:block pt-10">
+                <button onclick="window.print()" class="w-full bg-blue-600 text-white py-5 rounded-2xl font-black shadow-xl flex items-center justify-center gap-3"><i class="fas fa-print"></i> EXPORTER PDF</button>
+            </div>
+        </div>
+
+        <!-- PREVIEW (MODE APP SUR MOBILE) -->
+        <div id="preview-panel" class="tab-content flex-1 bg-slate-200 overflow-y-auto lg:flex justify-center h-full">
+            <div class="invoice-preview-wrapper py-10 lg:p-20">
+                <div class="invoice-container shadow-2xl">
+                    <!-- Facture Content (Rendu identique) -->
+                    <div class="flex justify-between items-start border-b-[6px] border-slate-900 pb-10">
+                        <div class="space-y-5">
+                            <h1 class="text-4xl font-black text-slate-900 uppercase tracking-tighter" id="out-my-name">Valentin Schwebius EI</h1>
+                            <div class="flex items-center gap-2">
+                                <span class="bg-slate-900 text-white text-[9px] font-black px-2 py-0.5 rounded tracking-widest uppercase">Designer</span>
+                                <span class="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded tracking-widest uppercase">Franchise TVA</span>
+                            </div>
+                            <div class="text-[11px] text-slate-500 space-y-1 font-semibold leading-relaxed">
+                                <p id="out-my-addr" class="whitespace-pre-line text-slate-900 font-bold">5 RUE de l'Épinoche&#10;67000 Strasbourg, France</p>
+                                <p class="flex gap-4 opacity-50">
+                                    <span>SIRET : <b id="out-my-siret">999 202 450 00014</b></span>
+                                    <span>APE : <b id="out-my-ape">7410Z</b></span>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="text-right flex flex-col items-end">
+                            <div class="border-[4px] border-slate-900 px-6 py-4 mb-6 bg-white">
+                                <h2 class="text-2xl font-black text-slate-900 tracking-tighter">FACTURE</h2>
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">Réf.</p>
+                                <p id="out-inv-num" class="text-xl font-black text-slate-900">F-2026-001</p>
+                                <p class="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-3">Date</p>
+                                <p id="out-inv-date" class="font-bold text-slate-900">23 février 2026</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-20 py-16">
+                        <div>
+                            <h3 class="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-[0.3em] border-b pb-2">Destinataire</h3>
+                            <div class="text-slate-900">
+                                <p class="font-black text-2xl tracking-tight mb-2 uppercase" id="out-cli-name">JZ SANTE NATURELLE</p>
+                                <p class="text-sm whitespace-pre-line font-bold text-slate-500 leading-relaxed" id="out-cli-addr">Parc d’Innovation&#10;100 Rue Léon Foucault&#10;67400 Illkirch-Graffenstaden</p>
+                                <p class="mt-4 text-[10px] font-black text-slate-300 uppercase" id="out-cli-tva">TVA : FR49500676150</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-col justify-end">
+                            <div class="bg-slate-50 p-6 rounded border-l-[8px] border-slate-900 shadow-sm">
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Règlement</p>
+                                <p class="text-sm font-black text-slate-900">À réception de facture</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <table class="w-full text-left mb-10 border-collapse">
+                        <thead class="bg-slate-900 text-white">
+                            <tr>
+                                <th class="p-5 text-[10px] font-black uppercase tracking-widest">Prestations</th>
+                                <th class="p-5 text-[10px] font-black uppercase tracking-widest text-center w-24">Quantité</th>
+                                <th class="p-5 text-[10px] font-black uppercase tracking-widest text-right w-32">P.U HT</th>
+                                <th class="p-5 text-[10px] font-black uppercase tracking-widest text-right w-32">Total HT</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoice-items-body" class="divide-y divide-slate-100 border-b-2 border-slate-900"></tbody>
+                    </table>
+
+                    <div class="flex justify-end">
+                        <div class="w-72 space-y-4">
+                            <div class="flex justify-between text-slate-400 font-bold text-[11px] uppercase tracking-widest">
+                                <span>Total Brut HT</span>
+                                <span class="text-slate-900"><span id="out-total-brut">0,00</span> €</span>
+                            </div>
+                            <div class="flex justify-between text-slate-400 italic text-[11px] border-b border-slate-100 pb-3 font-bold">
+                                <span>Acompte (<span id="out-dep-pct">0</span>%)</span>
+                                <span>- <span id="out-dep-val">0,00</span> €</span>
+                            </div>
+                            <div class="flex justify-between items-center pt-2">
+                                <span class="text-xs font-black text-slate-900 uppercase tracking-widest">Total Net :</span>
+                                <span class="text-4xl font-black text-blue-600 tracking-tighter"><span id="out-net">0,00</span> €</span>
+                            </div>
+                            <p class="text-[9px] text-right text-slate-300 font-black uppercase mt-4">TVA non applicable, art. 293 B du CGI</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-20 pt-10 border-t border-slate-100 grid grid-cols-2 gap-12">
+                        <div class="space-y-5">
+                            <h4 class="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2"><i class="fas fa-copyright text-blue-600"></i> Propriété Intellectuelle</h4>
+                            <div class="bg-slate-50 p-5 rounded-lg border text-[10px] text-slate-600 font-bold leading-relaxed space-y-1">
+                                <p>Supports : <span id="out-rights-type" class="text-slate-900">Web & Print</span></p>
+                                <p>Durée : <span id="out-rights-time" class="text-slate-900">Illimitée</span></p>
+                                <p>Territoire : <span id="out-rights-geo" class="text-slate-900">Monde entier</span></p>
+                            </div>
+                        </div>
+                        <div class="space-y-5">
+                            <h4 class="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2"><i class="fas fa-university text-blue-600"></i> RIB / IBAN</h4>
+                            <div class="bg-slate-50 p-5 rounded-lg border text-[10px] text-slate-600 space-y-1.5 font-bold uppercase tracking-tight">
+                                <p class="flex justify-between"><span>IBAN</span> <span id="out-iban" class="font-mono text-slate-900">FR76 ...</span></p>
+                                <p class="flex justify-between"><span>BIC</span> <span id="out-bic" class="font-mono text-slate-900">CMCIFR2A</span></p>
+                                <p class="pt-1 text-[8px] opacity-40 uppercase" id="out-bank-name">Banque : CCM DE SOUFFELWEYERSHEIM</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-20 text-center text-[8px] text-slate-300 uppercase tracking-[0.4em] font-bold border-t border-slate-50 pt-10" id="footer-line">
+                        Valentin Schwebius EI — SIRET 999 202 450 00014
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM NAVIGATION (MOBILE ONLY) -->
+    <nav class="no-print lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t px-6 py-3 flex justify-between items-center z-50 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.1)]">
+        <button onclick="switchTab('config')" class="nav-item active flex flex-col items-center gap-1">
+            <i class="fas fa-cog text-xl"></i>
+            <span class="text-[10px] font-bold uppercase tracking-widest">Infos</span>
+        </button>
+        <button onclick="switchTab('items')" class="nav-item flex flex-col items-center gap-1">
+            <i class="fas fa-list-ul text-xl"></i>
+            <span class="text-[10px] font-bold uppercase tracking-widest">Prestations</span>
+        </button>
+        <button onclick="switchTab('preview')" class="nav-item flex flex-col items-center gap-1">
+            <i class="fas fa-eye text-xl"></i>
+            <span class="text-[10px] font-bold uppercase tracking-widest">Facture</span>
+        </button>
+    </nav>
+
+    <script>
+        let items = [
+            { id: 1, desc: "Direction Artistique & Concept", qty: 1, unit: "Forfait", price: 300 },
+            { id: 2, desc: "Création de 3 visuels multi-formats", qty: 3, unit: "Unité", price: 100 }
+        ];
+
+        // --- NAVIGATION APP ---
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            
+            if (tab === 'config') {
+                document.getElementById('config-panel').classList.add('active');
+                document.querySelector('.nav-item:nth-child(1)').classList.add('active');
+            } else if (tab === 'items') {
+                document.getElementById('config-panel').classList.add('active');
+                document.querySelector('.nav-item:nth-child(2)').classList.add('active');
+                // Scroll focus to items section
+                document.getElementById('items-inputs-container').scrollIntoView({behavior: 'smooth'});
+            } else if (tab === 'preview') {
+                document.getElementById('preview-panel').classList.add('active');
+                document.querySelector('.nav-item:nth-child(3)').classList.add('active');
+            }
+        }
+
+        // --- LOGIQUE FACTURE ---
+        function loadData() {
+            const savedItems = localStorage.getItem('inv_items');
+            if (savedItems) items = JSON.parse(savedItems);
+
+            const fields = ['in-my-name', 'in-my-addr', 'in-my-siret', 'in-my-ape', 'in-cli-name', 'in-cli-addr', 'in-cli-tva', 'in-rights-type', 'in-rights-time', 'in-rights-geo', 'in-inv-num', 'in-dep-pct', 'in-inv-date', 'in-iban', 'in-bic', 'in-bank'];
+            fields.forEach(id => {
+                const val = localStorage.getItem('inv_' + id);
+                if (val) document.getElementById(id).value = val;
+            });
+        }
+
+        function updateAndSave() {
+            const fields = ['in-my-name', 'in-my-addr', 'in-my-siret', 'in-my-ape', 'in-cli-name', 'in-cli-addr', 'in-cli-tva', 'in-rights-type', 'in-rights-time', 'in-rights-geo', 'in-inv-num', 'in-dep-pct', 'in-inv-date', 'in-iban', 'in-bic', 'in-bank'];
+            fields.forEach(id => localStorage.setItem('inv_' + id, document.getElementById(id).value));
+            localStorage.setItem('inv_items', JSON.stringify(items));
+            update();
+        }
+
+        function resetData() { if(confirm("Réinitialiser l'application ?")) { localStorage.clear(); window.location.reload(); } }
+
+        function addItemRow() {
+            items.push({ id: Date.now(), desc: "Nouveau service", qty: 1, unit: "Forfait", price: 0 });
+            renderInputs();
+            updateAndSave();
+        }
+
+        function removeItem(id) { items = items.filter(i => i.id !== id); renderInputs(); updateAndSave(); }
+
+        function updateItem(id, field, value) {
+            const i = items.find(x => x.id === id);
+            if (i) { i[field] = field === 'desc' || field === 'unit' ? value : parseFloat(value) || 0; updateAndSave(); }
+        }
+
+        function renderInputs() {
+            const c = document.getElementById('items-inputs-container');
+            c.innerHTML = '';
+            items.forEach((item, idx) => {
+                const d = document.createElement('div');
+                d.className = "item-row bg-slate-50 p-5 rounded-2xl shadow-sm relative space-y-4";
+                d.innerHTML = `
+                    <button onclick="removeItem(${item.id})" class="absolute -right-2 -top-2 bg-red-500 text-white w-7 h-7 rounded-full text-[12px] shadow-lg flex items-center justify-center"><i class="fas fa-times"></i></button>
+                    <div>
+                        <label>Description Service ${idx + 1}</label>
+                        <input type="text" value="${item.desc}" oninput="updateItem(${item.id}, 'desc', this.value)">
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div><label>Qté</label><input type="number" value="${item.qty}" oninput="updateItem(${item.id}, 'qty', this.value)"></div>
+                        <div>
+                            <label>Unité</label>
+                            <select oninput="updateItem(${item.id}, 'unit', this.value)">
+                                <option value="Forfait" ${item.unit==='Forfait'?'selected':''}>Forfait</option>
+                                <option value="Unité" ${item.unit==='Unité'?'selected':''}>Unité</option>
+                                <option value="Heure" ${item.unit==='Heure'?'selected':''}>Heure</option>
+                                <option value="Jour" ${item.unit==='Jour'?'selected':''}>Jour</option>
+                            </select>
+                        </div>
+                        <div><label>P.U HT</label><input type="number" value="${item.price}" oninput="updateItem(${item.id}, 'price', this.value)"></div>
+                    </div>
+                `;
+                c.appendChild(d);
+            });
+        }
+
+        function update() {
+            const getV = (id) => document.getElementById(id).value;
+            const setT = (id, val) => { if(document.getElementById(id)) document.getElementById(id).textContent = val; };
+            const f = (v) => v.toLocaleString('fr-FR', { minimumFractionDigits: 2 });
+
+            setT('out-my-name', getV('in-my-name'));
+            setT('out-my-addr', getV('in-my-addr'));
+            setT('out-my-siret', getV('in-my-siret'));
+            setT('out-my-ape', getV('in-my-ape'));
+            setT('out-cli-name', getV('in-cli-name'));
+            setT('out-cli-addr', getV('in-cli-addr'));
+            setT('out-cli-tva', getV('in-cli-tva') ? 'TVA : ' + getV('in-cli-tva') : '');
+
+            setT('out-iban', getV('in-iban'));
+            setT('out-bic', getV('in-bic'));
+            setT('out-bank-name', 'Établissement : ' + getV('in-bank'));
+            setT('out-rights-type', getV('in-rights-type'));
+            setT('out-rights-time', getV('in-rights-time'));
+            setT('out-rights-geo', getV('in-rights-geo'));
+            
+            setT('footer-line', `${getV('in-my-name')} — SIRET ${getV('in-my-siret')} — 67000 Strasbourg`);
+
+            setT('out-inv-num', getV('in-inv-num'));
+            setT('out-inv-date', getV('in-inv-date'));
+
+            const tb = document.getElementById('invoice-items-body');
+            tb.innerHTML = '';
+            let total = 0;
+            items.forEach(i => {
+                const line = i.qty * i.price;
+                total += line;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td class="p-5 font-black text-slate-800 text-[11px] leading-tight">${i.desc}</td><td class="p-5 text-center font-bold text-slate-400 text-[10px]">${i.qty} ${i.unit}</td><td class="p-5 text-right font-bold text-slate-400 text-[10px]">${f(i.price)} €</td><td class="p-5 text-right font-black text-slate-900 text-[11px]">${f(line)} €</td>`;
+                tb.appendChild(tr);
+            });
+
+            const pct = parseFloat(getV('in-dep-pct')) || 0;
+            const dep = (total * pct) / 100;
+            setT('out-total-brut', f(total));
+            setT('out-dep-pct', pct);
+            setT('out-dep-val', f(dep));
+            setT('out-net', f(total - dep));
+        }
+
+        window.onload = () => { loadData(); renderInputs(); update(); };
+    </script>
+</body>
+</html>
